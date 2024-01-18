@@ -1,0 +1,214 @@
+import pandas as pd
+import numpy as np
+import pandas_profiling
+from pandas import Series, DataFrame
+import matplotlib.pyplot as plt
+import os
+from wordcloud import WordCloud ,STOPWORDS, ImageColorGenerator
+import seaborn as sns
+%matplotlib inline
+import folium
+from folium.plugins import HeatMap
+p = "YlGnBu"
+p2 = "YlGn"
+p3 = "Greys"
+p4="viridis"
+p5="coolwarm"
+data=pd.read_csv('crime.csv', encoding='iso-8859-1')
+data
+d2= pd.read_csv('offense_codes.csv', encoding='iso-8859-1')
+# Keep only data from complete years (2016, 2017)
+data = data.loc[data['YEAR'].isin([2016,2017])]
+data=data[data["UCR_PART"]=='Part One']
+data = data.drop(['INCIDENT_NUMBER','OFFENSE_CODE','UCR_PART','Location'], axis=1)
+data['OCCURRED_ON_DATE'] = pd.to_datetime(data['OCCURRED_ON_DATE'])
+data['SHOOTING'].fillna('N', inplace=True)
+# Convert DAY_OF_WEEK to an ordered category
+data['DAY_OF_WEEK'] = pd.Categorical(data.DAY_OF_WEEK, 
+              categories=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'],
+              ordered=True)
+
+# Replace -1 values in Lat/Long with Nan
+data.Lat.replace(-1, None, inplace=True)
+data.Long.replace(-1, None, inplace=True)
+
+# Rename columns to something easier to type (the all-caps are annoying!)
+rename = {'OFFENSE_CODE_GROUP':'Group',
+         'OFFENSE_DESCRIPTION':'Description',
+         'DISTRICT':'District',
+         'REPORTING_AREA':'Area',
+         'SHOOTING':'Shooting',
+         'OCCURRED_ON_DATE':'Date',
+         'YEAR':'Year',
+         'MONTH':'Month',
+         'DAY_OF_WEEK':'Day',
+         'HOUR':'Hour',
+         'STREET':'Street'}
+data.rename(index=str, columns=rename, inplace=True)
+
+# Check
+data['Group'].value_counts()
+data.dtypes
+data.isnull().sum()
+data.shape
+sns.catplot(y='Group', kind='count', height=10, aspect=1.5, order=data.Group.value_counts().index,  data=data)
+plt.xticks(size=15)
+plt.yticks(size=15)
+sns.catplot(x='Hour',
+           kind='count',
+            height=8.27, 
+            aspect=3,
+            color='blue',
+           data=data)
+plt.xticks(size=30)
+plt.yticks(size=30)
+plt.xlabel('Hour', fontsize=40)
+plt.ylabel('Count', fontsize=40)
+sns.catplot(x='Day',
+           kind='count',
+            height=8, 
+            aspect=3,
+           data=data)
+plt.xticks(size=30)
+plt.yticks(size=30)
+plt.xlabel('')
+plt.ylabel('Count', fontsize=40)
+x=data.groupby('Group')['Day'].value_counts()
+x= pd.DataFrame(x)
+Months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+sns.catplot(x='Month',
+           kind='count',
+            height=8.27, 
+            aspect=3,
+            color='red',
+           data=data)
+plt.xticks(np.arange(12), Months, size=30)
+
+# plt.xticks(size=30)
+plt.yticks(size=30)
+plt.xlabel('Month', fontsize=40)
+plt.ylabel('Count', fontsize=40)
+data['Day_of_year'] = data["Date"].dt.dayofyear
+data_holidays = data[data.Year == 2017].groupby(['Day_of_year']).size().reset_index(name='counts')
+ Dates of major U.S. holidays in 2017
+holidays = pd.Series(['2017-01-01', # New Years Day
+                     '2017-01-16', # MLK Day
+                     '2017-03-17', # St. Patrick's Day
+                     '2017-04-17', # Boston marathon
+                     '2017-05-29', # Memorial Day
+                     '2017-07-04', # Independence Day
+                     '2017-09-04', # Labor Day
+                     '2017-10-10', # Veterans Day
+                     '2017-11-23', # Thanksgiving
+                     '2017-12-25']) # Christmas
+holidays = pd.to_datetime(holidays).dt.dayofyear
+holidays_names = ['NY',
+                 'MLK',
+                 'St Pats',
+                 'Marathon',
+                 'Mem',
+                 'July 4',
+                 'Labor',
+                 'Vets',
+                 'Thnx',
+                 'Xmas']
+
+import datetime as dt
+# Plot crimes and holidays
+fig, ax = plt.subplots(figsize=(11,6))
+sns.lineplot(x='Day_of_year',
+            y='counts',
+            ax=ax,
+            data=data_holidays)
+plt.xlabel('Day of the year')
+plt.vlines(holidays, 20, 80, alpha=0.8, color ='r')
+for i in range(len(holidays)):
+    plt.text(x=holidays[i], y=82, s=holidays_names[i])
+a4_dims = (11.7, 8.27)
+fig, ax = plt.subplots(figsize=a4_dims)
+sns.scatterplot(x='Lat',
+               y='Long',
+                alpha=0.3,
+               data=data, ax=ax)
+# Plot districts
+a4_dims = (11.7, 8.27)
+fig, ax = plt.subplots(figsize=a4_dims)
+sns.scatterplot(x='Lat',
+               y='Long',
+                hue='District',
+                alpha=0.2,
+               data=data, ax=ax)
+plt.legend(bbox_to_anchor=(1.05, 1), loc=2, fontsize=15)
+# Create basic Folium crime map
+crime_map = folium.Map(location=[42.3125,-71.0875], 
+                       tiles = "Stamen Toner",
+                      zoom_start = 11)
+
+# Add data for heatmp 
+data_heatmap = data[data.Year == 2017]
+data_heatmap = data[['Lat','Long']]
+data_heatmap = data.dropna(axis=0, subset=['Lat','Long'])
+data_heatmap = [[row['Lat'],row['Long']] for index, row in data_heatmap.iterrows()]
+HeatMap(data_heatmap, radius=10).add_to(crime_map)
+
+# Plot!
+crime_map
+import folium
+from folium.plugins import HeatMap
+
+map_hooray = folium.Map(location=[42.361145,-71.057083],
+                    zoom_start = 12, min_zoom=12, tiles= "Stamen Toner" ) #Giving the location just write boston coordinat to google
+
+heat_df = data[(data['Year']==2017 )& (data['Group']=='Larceny')]# I take 2017 cause there is more crime against to other years
+# heat_df = data[data['Group']=='Larceny'] 
+heat_df = heat_df[['Lat', 'Long']] #giving only latitude and longitude now in heat_df just latitude and longitude
+                                        #from 2017 larceny responde
+heat_df=heat_df.dropna()
+folium.CircleMarker([42.356145,-71.064083],
+                    radius=50,
+                    popup='Homicide',
+                    color='red',
+                    ).add_to(map_hooray) #Adding mark on the map but it's hard to find correct place. 
+                                         #it's take to muhc time
+    
+    
+heat_data = [[row['Lat'],row['Long']] for index, row in heat_df.iterrows()]
+#We have to give latitude and longitude like this [[lat, lon],[lat, lon],[lat, lon],[lat, lon],[lat, lon]]
+
+HeatMap(heat_data, radius=10).add_to(map_hooray) #Adding map_hooray to HeatMap
+map_hooray #Plotting
+map_hooray = folium.Map(location=[42.361145,-71.057083],
+                    zoom_start = 12, min_zoom=12, tiles= "Stamen Toner" )
+
+heat_df = data[(data['Year']==2017 )& (data['Group']=='Larceny From Motor Vehicle')]# I take 2017 cause there is more crime against to other years
+heat_df = heat_df[['Lat', 'Long']]
+heat_df = heat_df.dropna()
+
+folium.CircleMarker([42.356145,-71.064083],
+                    radius=50,
+                    popup='Homicide',
+                    color='red',
+                    ).add_to(map_hooray) #Adding mark on the map but it's hard to find correct place. 
+                                         #it's take to muhc time
+
+heat_data = [[row['Lat'],row['Long']] for index, row in heat_df.iterrows()]
+HeatMap(heat_data, radius=10).add_to(map_hooray)
+map_hooray
+map_hooray = folium.Map(location=[42.361145,-71.057083],
+                    zoom_start = 12, min_zoom=12, tiles= "Stamen Toner" )
+
+heat_df = data[(data['Year']==2017 )& (data['Group']=='Robbery')]# I take 2017 cause there is more crime against to other years
+heat_df = heat_df[['Lat', 'Long']]
+heat_df = heat_df.dropna()
+
+folium.CircleMarker([42.356145,-71.064083],
+                    radius=50,
+                    popup='Homicide',
+                    color='red',
+                    ).add_to(map_hooray) #Adding mark on the map but it's hard to find correct place. 
+                                         #it's take to muhc time
+
+heat_data = [[row['Lat'],row['Long']] for index, row in heat_df.iterrows()]
+HeatMap(heat_data, radius=10).add_to(map_hooray)
+map_hooray
